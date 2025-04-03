@@ -1,0 +1,89 @@
+name: Bot CI/CD
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-bot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set owner name to lowercase for docker compatibility
+        run: |
+          echo "OWNER_LC=${OWNER,,}" >>${GITHUB_ENV}
+        env:
+          OWNER: '${{ github.repository_owner }}'
+
+      - name: Build and push bot image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER_LC }}/polaris:latest
+          cache-from: type=registry,ref=ghcr.io/${{ env.OWNER_LC }}/polaris:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ env.OWNER_LC }}/polaris:buildcache,mode=max
+
+  deploy:
+    needs: build-bot
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create .env file for deployment
+        run: |
+          echo "DISCORD_ID=${{ secrets.BOT_ID }}" >> .env
+          echo "DISCORD_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
+          echo "DISCORD_SECRET=${{ secrets.BOT_SECRET }}" >> .env
+          echo "MONGO_USERNAME=${{ secrets.MONGO_USERNAME }}" >> .env
+          echo "MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}" >> .env
+          echo "MONGO_DATABASE=${{ secrets.MONGO_DATABASE }}" >> .env
+          echo "MONGO_DB_URI=mongodb://${{ secrets.MONGO_USERNAME }}:${{ secrets.MONGO_PASSWORD }}@mongodb:27017/${{ secrets.MONGO_DATABASE }}?authSource=admin" >> .env
+
+      - name: Copy files to deploy host
+        run: |
+          scp docker-stack.yml ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:~/docker-stack.yml
+          scp .env ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:~/.env
+
+      - name: Deploy Bot using Docker Stack
+        run: |
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "\
+          docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} -p ${{ secrets.GHCR_TOKEN }} && \
+          MONGO_USERNAME=${{ secrets.MONGO_USERNAME }} \
+          MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }} \
+          MONGO_DATABASE=${{ secrets.MONGO_DATABASE }} \
+          docker stack deploy \
+          --with-registry-auth \
+          --compose-file docker-stack.yml \
+          polaris_stack"
+
+      - name: Cleanup SSH key
+        run: rm -rf ~/.ssh
+        if: always()

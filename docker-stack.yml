@@ -1,0 +1,25 @@
+services:
+  polaris:
+    image: ghcr.io/all-rated-extreme-demon-list/polaris:latest
+    ports:
+      - "6880:6880"
+    environment:
+      NODE_ENV: production
+    env_file:
+      - .env
+    depends_on:
+      - mongodb
+
+  mongodb:
+    image: mongo:7.0
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
+
+volumes:
+  mongodb_data:
