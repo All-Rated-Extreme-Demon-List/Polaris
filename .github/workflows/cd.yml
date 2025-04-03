@@ -1,4 +1,4 @@
-name: Bot CI/CD
+name: Bot CD
 
 on:
   workflow_dispatch:
@@ -59,9 +59,9 @@ jobs:
 
       - name: Create .env file for deployment
         run: |
-          echo "DISCORD_ID=${{ secrets.BOT_ID }}" >> .env
-          echo "DISCORD_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
-          echo "DISCORD_SECRET=${{ secrets.BOT_SECRET }}" >> .env
+          echo "DISCORD_ID=${{ secrets.DISCORD_ID }}" >> .env
+          echo "DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}" >> .env
+          echo "DISCORD_SECRET=${{ secrets.DISCORD_SECRET }}" >> .env
           echo "MONGO_USERNAME=${{ secrets.MONGO_USERNAME }}" >> .env
           echo "MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}" >> .env
           echo "MONGO_DATABASE=${{ secrets.MONGO_DATABASE }}" >> .env
